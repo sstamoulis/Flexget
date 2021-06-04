@@ -1,4 +1,5 @@
 import math
+from collections import Counter
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -13,7 +14,7 @@ logger = logger.bind(name='next_sonarr_episodes')
 
 class NextSonarrEpisodes:
     """
-    This plugin return the 1st missing episode of every show configures in Sonarr.
+    This plugin returns one or more missing episodes of every show configured in Sonarr.
     This can be used with the discover plugin or set_series_begin plugin to
     get the relevant data from Sonarr.
 
@@ -26,10 +27,14 @@ class NextSonarrEpisodes:
       include_ended=<yes|no> (Default is yes)
       only_monitored=<yes|no> (Default is yes)
       page_size=<value> (Default is 50)
+      limit=<value> (Default is 1)
 
     Page size determines the amount of results per each API call.
     Higher value means a bigger response. Lower value means more calls.
     Should be changed if there are performance issues.
+
+    Limit can be any number greter or equal to 1 or a boolean (yes or no)
+    Yes is the same as 1, while no returns all found episodes
 
 
     Usage: (Example with discover)
@@ -69,6 +74,7 @@ class NextSonarrEpisodes:
             'include_ended': {'type': 'boolean', 'default': True},
             'only_monitored': {'type': 'boolean', 'default': True},
             'page_size': {'type': 'number', 'default': 50},
+            'limit': {'type': ['integer', 'boolean'], 'default': 1, 'minimum': 1}
         },
         'required': ['api_key', 'base_url'],
         'additionalProperties': False,
@@ -101,13 +107,20 @@ class NextSonarrEpisodes:
         pages = int(
             math.ceil(json['totalRecords'] / config.get('page_size'))
         )  # Sets number of requested pages
-        current_series_id = 0  # Initializes current series parameter
+        series_counter = Counter() # Initialize series counter
+        limit = config.get('limit')
+        if limit is False: # False means no limit, so infinite
+            limit = math.inf
+        else:              # True is converted to 1, any number remain unchanged
+            limit = int(limit)
         for page in range(1, pages + 1):
-            json = self.get_page(task, config, page)
+            # No need to request again the first page
+            if page > 1:
+                json = self.get_page(task, config, page)
             for record in json['records']:
-                # Verifies that we only get the first missing episode from a series
-                if current_series_id != record['seriesId']:
-                    current_series_id = record['seriesId']
+                # Verifies that we only get limit episodes from each series
+                if series_counter[record['seriesId']] < config.get('limit'):
+                    series_counter[record['seriesId']] += 1
                     season = record['seasonNumber']
                     episode = record['episodeNumber']
                     entry = Entry(
