@@ -133,6 +133,10 @@ class NextSonarrEpisodes:
                         tvrage_id=record['series'].get('tvRageId'),
                         tvmaze_id=record['series'].get('tvMazeId'),
                         title=record['series']['title'] + ' ' + 'S%02dE%02d' % (season, episode),
+                        sonarr_series_id=record['seriesId'],
+                        sonarr_airdate=record['airDate'],
+                        sonarr_episode_title=record['title'],
+                        sonarr_episode_overview=record['overview']
                     )
                     # Test mode logging
                     if entry and task.options.test:
